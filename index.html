@@ -1,0 +1,232 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore'; // Not strictly needed for this app, but good to include if storage becomes a future need
+
+// Main App component
+const App = () => {
+  const [prompt, setPrompt] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+
+  useEffect(() => {
+    // Initialize Firebase
+    try {
+      const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+      const app = initializeApp(firebaseConfig);
+      const firestoreDb = getFirestore(app);
+      const firebaseAuth = getAuth(app);
+
+      setDb(firestoreDb);
+      setAuth(firebaseAuth);
+
+      // Sign in anonymously or with custom token
+      const signIn = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined') {
+            await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+          } else {
+            await signInAnonymously(firebaseAuth);
+          }
+          setUserId(firebaseAuth.currentUser?.uid || crypto.randomUUID());
+        } catch (authError) {
+          console.error("Erro ao autenticar no Firebase:", authError);
+          setError("Erro ao autenticar. Por favor, tente novamente.");
+          setUserId(crypto.randomUUID()); // Fallback to a random ID if auth fails
+        }
+      };
+      signIn();
+    } catch (firebaseError) {
+      console.error("Erro ao inicializar Firebase:", firebaseError);
+      setError("Erro ao configurar o Firebase. A funcionalidade de IA pode não funcionar.");
+      setUserId(crypto.randomUUID()); // Ensure userId is set even if Firebase init fails
+    }
+  }, []);
+
+  const generateText = async () => {
+    if (!prompt.trim()) {
+      setError('Por favor, insira um prompt.');
+      return;
+    }
+
+    setIsLoading(true);
+    setAiResponse('');
+    setError('');
+
+    try {
+      let chatHistory = [];
+      chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+      const payload = { contents: chatHistory };
+      const apiKey = ""; // Canvas will automatically provide this if empty for gemini-2.0-flash
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (result.candidates && result.candidates.length > 0 &&
+          result.candidates[0].content && result.candidates[0].content.parts &&
+          result.candidates[0].content.parts.length > 0) {
+        const text = result.candidates[0].content.parts[0].text;
+        setAiResponse(text);
+      } else {
+        setError('Não foi possível gerar uma resposta. Tente novamente.');
+        console.error('Resposta inesperada da API:', result);
+      }
+    } catch (apiError) {
+      setError('Ocorreu um erro ao comunicar com a IA. Por favor, tente novamente mais tarde.');
+      console.error('Erro na chamada da API Gemini:', apiError);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-800 font-sans text-gray-100 flex flex-col">
+      {/* Header */}
+      <header className="bg-white bg-opacity-10 p-4 shadow-lg">
+        <nav className="container mx-auto flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-white">AI Landing Page</h1>
+          <ul className="flex space-x-6">
+            <li><a href="#hero" className="hover:text-purple-300 transition-colors duration-300">Início</a></li>
+            <li><a href="#features" className="hover:text-purple-300 transition-colors duration-300">Recursos</a></li>
+            <li><a href="#ai-section" className="hover:text-purple-300 transition-colors duration-300">Experimente a IA</a></li>
+            <li><a href="#contact" className="hover:text-purple-300 transition-colors duration-300">Contato</a></li>
+          </ul>
+        </nav>
+      </header>
+
+      {/* Hero Section */}
+      <section id="hero" className="flex-grow flex items-center justify-center text-center py-20 px-4">
+        <div className="max-w-4xl">
+          <h2 className="text-5xl md:text-6xl font-extrabold leading-tight mb-6 animate-fade-in">
+            Desbloqueie o Potencial da <span className="text-yellow-300">Inteligência Artificial</span>
+          </h2>
+          <p className="text-xl md:text-2xl mb-8 opacity-90 animate-slide-up">
+            Transforme suas ideias em realidade com nossa IA de ponta.
+          </p>
+          <button className="bg-yellow-400 text-purple-900 font-bold py-3 px-8 rounded-full shadow-lg hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105">
+            Comece Agora
+          </button>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="bg-white bg-opacity-5 py-16 px-4">
+        <div className="container mx-auto text-center">
+          <h3 className="text-4xl font-bold mb-12">Nossos Recursos Incríveis</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+            <div className="bg-white bg-opacity-10 p-8 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300">
+              <div className="text-5xl mb-4 text-yellow-300">💡</div>
+              <h4 className="text-2xl font-semibold mb-3">Geração de Conteúdo</h4>
+              <p className="opacity-80">Crie textos, artigos e ideias originais em segundos.</p>
+            </div>
+            <div className="bg-white bg-opacity-10 p-8 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300">
+              <div className="text-5xl mb-4 text-yellow-300">⚡</div>
+              <h4 className="text-2xl font-semibold mb-3">Automação Inteligente</h4>
+              <p className="opacity-80">Automatize tarefas repetitivas com precisão e eficiência.</p>
+            </div>
+            <div className="bg-white bg-opacity-10 p-8 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300">
+              <div className="text-5xl mb-4 text-yellow-300">📈</div>
+              <h4 className="text-2xl font-semibold mb-3">Análise de Dados</h4>
+              <p className="opacity-80">Obtenha insights valiosos a partir dos seus dados.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* AI Interaction Section */}
+      <section id="ai-section" className="py-16 px-4 bg-white bg-opacity-10">
+        <div className="container mx-auto text-center max-w-2xl">
+          <h3 className="text-4xl font-bold mb-8">Experimente Nossa IA</h3>
+          <p className="text-lg mb-8 opacity-80">
+            Digite um prompt abaixo e veja nossa inteligência artificial gerar uma resposta para você!
+          </p>
+          <div className="flex flex-col items-center space-y-4">
+            <textarea
+              className="w-full p-4 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all duration-200 resize-y min-h-[120px]"
+              placeholder="Ex: Escreva um pequeno poema sobre o futuro da tecnologia..."
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows="5"
+            ></textarea>
+            <button
+              onClick={generateText}
+              disabled={isLoading}
+              className="bg-green-500 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-green-600 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Gerando...' : 'Gerar Resposta da IA'}
+            </button>
+            {error && <p className="text-red-400 mt-4">{error}</p>}
+            {aiResponse && (
+              <div className="mt-8 p-6 bg-gray-800 rounded-lg shadow-inner text-left w-full">
+                <h4 className="text-xl font-semibold mb-3 text-yellow-300">Resposta da IA:</h4>
+                <p className="whitespace-pre-wrap text-gray-200">{aiResponse}</p>
+              </div>
+            )}
+            {userId && (
+              <p className="text-sm text-gray-400 mt-4">
+                Seu ID de Usuário: <span className="font-mono break-all">{userId}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Contact Section */}
+      <section id="contact" className="py-16 px-4">
+        <div className="container mx-auto text-center">
+          <h3 className="text-4xl font-bold mb-8">Entre em Contato</h3>
+          <p className="text-lg mb-8 opacity-80">
+            Tem alguma pergunta ou quer saber mais? Fale conosco!
+          </p>
+          <a
+            href="mailto:contato@exemplo.com"
+            className="bg-purple-500 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:bg-purple-600 transition-all duration-300 transform hover:scale-105"
+          >
+            Enviar E-mail
+          </a>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-white bg-opacity-10 p-6 text-center text-gray-300">
+        <p>&copy; 2025 AI Landing Page. Todos os direitos reservados.</p>
+      </footer>
+
+      {/* Tailwind CSS and custom animations */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        body {
+          font-family: 'Inter', sans-serif;
+        }
+        .animate-fade-in {
+          animation: fadeIn 1s ease-out forwards;
+        }
+        .animate-slide-up {
+          animation: slideUp 1s ease-out forwards;
+          animation-delay: 0.5s;
+          opacity: 0;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default App;
